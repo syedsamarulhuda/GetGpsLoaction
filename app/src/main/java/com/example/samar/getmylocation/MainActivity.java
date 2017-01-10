@@ -14,17 +14,29 @@ import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.widget.TextView;
 
+import com.github.nkzawa.emitter.Emitter;
+import com.github.nkzawa.socketio.client.IO;
+import com.github.nkzawa.socketio.client.Socket;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Locale;
 
+
 public class MainActivity extends AppCompatActivity implements LocationListener {
 
-    TextView tvLat, tvLong, tvAddress;
+    TextView tvLat, tvLong, tvAddress, tvResponse;
     protected LocationManager locationManager;
 
-    final int REFRESHTIME = 100;
-    final float MINDISTANCE = 2;
+    String url = "https://node.flyrobeapp.com:8002";
+
+    final int REFRESHTIME = 5 * 1000; // Minimum time interval for update in seconds, i.e. 5 seconds.
+    final float MINDISTANCE = 10; // Minimum distance change for update in meters, i.e. 10 meters.
+
 
     private final int REQUEST_EXTERNAL_STORAGE = 1;
     private String[] PERMISSIONS_STORAGE = {
@@ -32,14 +44,25 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             Manifest.permission.ACCESS_COARSE_LOCATION
     };
 
+
+    private Socket mSocket;
+
+    {
+        try {
+            mSocket = IO.socket(url);
+        } catch (URISyntaxException e) {
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         tvAddress = (TextView) findViewById(R.id.tv_address);
+        tvResponse = (TextView) findViewById(R.id.tv_response);
 
         Log.d("#Loading", "activity....");
-
+        mSocket.connect();
 
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
 
@@ -101,6 +124,44 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         Log.d("#Postal Code", postalCode);
         Log.d("#knownName", knownName);
 
+        Emitter.Listener onNewMessage = new Emitter.Listener() {
+            @Override
+            public void call(final Object... args) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        JSONObject data = (JSONObject) args[0];
+                        Log.d("##RESPONSE-SOCKET", data.toString());
+
+
+                    }
+                });
+            }
+
+
+        };
+
+
+    }
+
+    private void sendLatLong(String longt, String lat) {
+        JSONObject params = new JSONObject();
+
+        try {
+            params.put("biker_id", "32");
+            params.put("first_name", "pritam");
+            params.put("last_name", "jana");
+            params.put("warehouse_id", "1");
+            params.put("address", "test");
+            params.put("long", longt);
+            params.put("lat", lat);
+
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
+        // mSocket.send(params);
+        mSocket.emit("start_tracking", params);
     }
 
 
@@ -112,6 +173,8 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         tvLong.setText(" Longitude:" + location.getLongitude());
 
         getAddress(location);
+
+        sendLatLong(location.getLongitude() + "", location.getLatitude() + "");
 
 
     }
@@ -129,5 +192,13 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     @Override
     public void onStatusChanged(String provider, int status, Bundle extras) {
         Log.d("#Latitude", "status");
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+
+        mSocket.disconnect();
+        //mSocket.off("new message", onNewMessage);
     }
 }
